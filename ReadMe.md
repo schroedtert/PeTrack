@@ -1,4 +1,4 @@
-# PeTrack
+# PeTrack Test
 
 [![Documentation Status](https://readthedocs.org/projects/petrack/badge/?version=latest)](https://petrack.readthedocs.io/en/latest/?badge=latest)
 [![pipeline status](https://jugit.fz-juelich.de/ped-dyn-emp/petrack/badges/master/pipeline.svg)](https://jugit.fz-juelich.de/ped-dyn-emp/petrack/-/commits/master) 
