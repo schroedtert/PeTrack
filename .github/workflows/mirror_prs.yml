@@ -7,20 +7,19 @@ name: Mirror to Gitlab to trigger CI
 on:
   push:
     branches-ignore:
-        - master
+      - master
   pull_request_target:
 
 jobs:
   check_permission:
     runs-on: ubuntu-latest
     if: >-
-        (github.repository_owner == 'ped-dyn-emp') &&
-        ((github.event_name == 'push') ||
-         (github.event_name == 'schedule') ||
-         ((github.event_name == 'pull_request_target') &&
-          (contains(github.event.pull_request.labels.*.name, 'gitlab-mirror'))
-         )
-        )
+      (github.repository_owner == 'schroedtert') &&
+      ((github.event_name == 'push') ||
+       (github.event_name == 'schedule') ||
+       ((github.event_name == 'pull_request_target'))
+       )
+      )
     steps:
       - name: Query permissions of triggering actor
         id: query_permission_triggering_actor
@@ -28,7 +27,7 @@ jobs:
         uses: actions-cool/check-user-permission@v2
         with:
           username: ${{ github.triggering_actor }}
-          require: 'write'
+          require: "write"
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Interpret the queried result
         if: github.event_name == 'pull_request_target'
@@ -49,17 +48,16 @@ jobs:
           (github.event_name == 'push') ||
           (github.event_name == 'schedule')
         run: exit 0
-      
+
   mirror_to_gitlab:
     runs-on: ubuntu-latest
     if: >-
-        (github.repository_owner == 'ped-dyn-emp') &&
-        ((github.event_name == 'push') ||
-         (github.event_name == 'schedule') ||
-         ((github.event_name == 'pull_request_target') &&
-          (contains(github.event.pull_request.labels.*.name, 'gitlab-mirror'))
-         )
-        )
+      (github.repository_owner == 'ped-dyn-emp') &&
+      ((github.event_name == 'push') ||
+       (github.event_name == 'schedule') ||
+       ((github.event_name == 'pull_request_target'))
+       )
+      )
     needs:
       - check_permission
     steps:
@@ -74,17 +72,46 @@ jobs:
           then
             echo "USED_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
           fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: "${{ env.USED_SHA }}"
           persist-credentials: false
+
       - name: Mirror to GitLab
         uses: jakob-fritz/github2lab_action@main
         env:
-          MODE: 'mirror' # Either 'mirror', 'get_status', 'get_artifact', or 'all'
+          MODE: "mirror" # Either 'mirror', 'get_status', 'get_artifact', or 'all'
           GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
           FORCE_PUSH: "true"
-          GITLAB_HOSTNAME: "jugit.fz-juelich.de"
-          GITLAB_PROJECT_ID: "3227"
+          GITLAB_HOSTNAME: "gitlab.com"
+          GITLAB_PROJECT_ID: "64985430"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create or Update Merge Request on GitLab
+        run: |
+          # Extract PR details
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          PR_SOURCE_BRANCH="${{ github.event.pull_request.head.ref }}"
+          PR_TARGET_BRANCH="master"
+          PR_DRAFT="${{ github.event.pull_request.draft }}"
+          PR_URL="${{ github.event.pull_request.html_url }}"
+
+          # Define draft state in GitLab
+          if [ "$PR_DRAFT" = "true" ]; then
+            MR_TITLE="Draft: $PR_TITLE"
+          else
+            MR_TITLE="$PR_TITLE"
+          fi
+
+          # Call GitLab API to create or update the MR
+          curl --header "PRIVATE-TOKEN: ${{ secrets.GITLAB_TOKEN }}" \
+               --header "Content-Type: application/json" \
+               --data "{
+                 \"source_branch\": \"$PR_SOURCE_BRANCH\",
+                 \"target_branch\": \"$PR_TARGET_BRANCH\",
+                 \"title\": \"$MR_TITLE\",
+                 \"description\": \"Automatically created from GitHub PR: $PR_URL\"
+               }" \
+               --request POST "https://gitlab.com/api/v4/projects/${{ secrets.GITLAB_PROJECT_ID }}/merge_requests"
